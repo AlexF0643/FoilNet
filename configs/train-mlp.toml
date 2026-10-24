@@ -1,0 +1,16 @@
+# Draft training config for the PyTorch MLP. Not read by anything yet (Phase 5).
+
+[model]
+hidden = [64, 64, 64]
+activation = "tanh"
+
+[train]
+epochs = 500
+batch_size = 128
+learning_rate = 1e-3
+seed = 0
+
+[split]
+train = 0.7
+val = 0.15
+test = 0.15

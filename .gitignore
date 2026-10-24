@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# generated data and models
+data/
+runs/
+*.npz
+*.pt
+
+.vscode/
+.idea/
+
+# hand-off zips
+dist-zips/

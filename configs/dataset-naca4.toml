@@ -1,0 +1,16 @@
+# Draft dataset config for NACA 4-digit shapes. Not read by anything yet (Phase 3).
+
+[dataset]
+name = "naca4-lhs"
+n_samples = 5000
+seed = 0
+
+[solver]
+n_panels = 160
+
+[ranges]
+# camber, camber position and thickness as fractions of chord
+camber = [0.0, 0.06]
+camber_position = [0.2, 0.6]
+thickness = [0.06, 0.18]
+alpha_deg = [-5.0, 12.0]

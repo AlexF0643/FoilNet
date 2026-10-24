@@ -30,6 +30,9 @@ from foilnet.geometry.paneling import Panels, build_panels
 
 _INV_2PI = 1.0 / (2.0 * np.pi)
 
+# Recorded in every dataset's metadata. Change it whenever a code change alters results.
+SOLVER_ID = "linear-vortex-kutta-v1"
+
 
 @dataclass(frozen=True)
 class PanelSolution:

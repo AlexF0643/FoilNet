@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Dataset pipeline: Latin hypercube sampling, parallel batch generation with provenance
+  metadata, `.npz` dataset format, reproducible train/validation/test split and a
+  standardiser. `foilnet generate` command.
+- `SOLVER_ID`, recorded in every dataset so results can be traced to a solver version.
 - Panel solver: linear-vortex method with a Kutta condition (`PanelSolver`, `solve`),
   returning Cl, Cm about the quarter chord, Cp and vortex strengths. Validated against the
   exact Karman-Trefftz solution, thin-aerofoil theory and a panel-count convergence study.

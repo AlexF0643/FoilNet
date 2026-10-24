@@ -16,7 +16,7 @@ I write and validate the solver myself, so I understand the physics behind every
 
 ## Status
 
-**Phases 0 to 2 done (spine, geometry, panel solver).** The solver is validated (see below). There is no dataset and no network yet. The remaining CLI subcommands are stubs that say which phase will implement them. Progress is tracked in [CHANGELOG.md](CHANGELOG.md) and the full roadmap is in [PROJECT_PLAN.md](PROJECT_PLAN.md).
+**Phases 0 to 3 done (spine, geometry, panel solver, dataset generation).** The solver is validated (see below) and can produce a labelled dataset. There is no network yet. `train` and `serve` are stubs that say which phase will implement them. Progress is tracked in [CHANGELOG.md](CHANGELOG.md) and the full roadmap is in [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Install
 
@@ -53,7 +53,25 @@ solver = PanelSolver(naca4_from_code("2412", n_panels=160))
 print(solver.solve(4.0).cl, solver.solve(8.0).cl)  # new angles of attack are almost free
 ```
 
-Planned subcommands that are still stubs: `generate`, `train`, `serve`.
+Planned subcommands that are still stubs: `train`, `serve`.
+
+## Dataset
+
+```bash
+foilnet generate --config configs/dataset-naca4.toml
+```
+
+This draws 5000 Latin hypercube samples of (camber, camber position, thickness, angle of attack), runs the panel solver on each in parallel, and writes `data/naca4-lhs.npz` (about 25 s on 8 cores). Every file carries its provenance: solver id and foilnet version, panel count, seed, parameter ranges, library versions and creation time. The same seed gives the same dataset whatever the number of workers.
+
+```python
+from foilnet.data import load_dataset, random_split, Standardizer
+
+ds = load_dataset("data/naca4-lhs.npz")
+train, val, test = random_split(ds, (0.7, 0.15, 0.15), seed=0)
+scaler = Standardizer.fit(train.x)  # fit on training data only
+```
+
+Labels are Cl and Cm from 160-panel solves. Against 640 panels they differ by at most 4e-4 in Cl and 8e-4 in Cm (spreads are 0.63 and 0.054), worst for thin, highly cambered sections at high angle of attack. That is a noise floor no surrogate can beat. Each sample also stores its pressure drag, which should be zero and is a per-sample check on numerical error.
 
 ## Solver validation
 

@@ -16,7 +16,7 @@ I write and validate the solver myself, so I understand the physics behind every
 
 ## Status
 
-**Phase 0 (spine) only.** The package installs, the CLI exists, CI runs. There is no solver, no dataset and no network yet. The CLI subcommands are stubs that say which phase will implement them. Progress is tracked in [CHANGELOG.md](CHANGELOG.md) and the full roadmap is in [PROJECT_PLAN.md](PROJECT_PLAN.md).
+**Phases 0 and 1 done (spine and geometry).** NACA 4-digit shapes and panel construction work and are tested. There is no solver, no dataset and no network yet. The CLI subcommands are stubs that say which phase will implement them. Progress is tracked in [CHANGELOG.md](CHANGELOG.md) and the full roadmap is in [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Install
 

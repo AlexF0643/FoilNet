@@ -16,7 +16,7 @@ I write and validate the solver myself, so I understand the physics behind every
 
 ## Status
 
-**Phases 0 to 3 done (spine, geometry, panel solver, dataset generation).** The solver is validated (see below) and can produce a labelled dataset. There is no network yet. `train` and `serve` are stubs that say which phase will implement them. Progress is tracked in [CHANGELOG.md](CHANGELOG.md) and the full roadmap is in [PROJECT_PLAN.md](PROJECT_PLAN.md).
+**Phases 0 to 4 done (spine, geometry, panel solver, dataset generation, from-scratch NumPy network).** The solver is validated (see below) and a hand-written network can already learn its output. The PyTorch surrogate, uncertainty and viewer are still to come; `train` and `serve` are stubs that say which phase will implement them. Progress is tracked in [CHANGELOG.md](CHANGELOG.md) and the full roadmap is in [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Install
 
@@ -72,6 +72,23 @@ scaler = Standardizer.fit(train.x)  # fit on training data only
 ```
 
 Labels are Cl and Cm from 160-panel solves. Against 640 panels they differ by at most 4e-4 in Cl and 8e-4 in Cm (spreads are 0.63 and 0.054), worst for thin, highly cambered sections at high angle of attack. That is a noise floor no surrogate can beat. Each sample also stores its pressure drag, which should be zero and is a per-sample check on numerical error.
+
+## From-scratch network
+
+`foilnet.nn.numpy_mlp` is a multi-layer perceptron in plain NumPy with backprop derived by hand (the derivation is in the module docstring) and an Adam optimiser. It is a learning exercise and a cross-check, not the final surrogate: PyTorch takes over in Phase 5.
+
+Backprop is checked against finite differences (`gradient_check`), which agree to about 1e-10 for tanh and ReLU, with and without weight decay.
+
+A first fit on the Phase 3 dataset, as a sanity check only (one seed, one split, a 4-64-64-2 tanh network, 300 epochs, hyperparameters not tuned), validation RMSE on 750 held-out samples:
+
+| training samples | Cl RMSE | Cm RMSE |
+|---|---|---|
+| 100 | 0.021 | 0.0021 |
+| 400 | 0.0067 | 0.00075 |
+| 1600 | 0.0035 | 0.00032 |
+| 3500 | 0.0032 | 0.00029 |
+
+For scale, the labels have a spread of 0.63 in Cl and 0.054 in Cm, so 3500 samples gets within about 0.5% of the spread. This is not yet a proper learning curve; that comes with the PyTorch surrogate in Phase 6.
 
 ## Solver validation
 

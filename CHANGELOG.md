@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- PyTorch surrogate (`foilnet.nn.model`, `foilnet.nn.train`): MLP, training with a
+  cosine schedule and best-epoch restore, `Surrogate` (raw in, raw out, save/load),
+  evaluation metrics, and `foilnet train`. Tested against the NumPy network's forward
+  pass and gradients.
+- Staged hyperparameter search scored on the validation set
+  (`foilnet.analysis.hparam_search`), with results and caveats in `docs/hyperparameters.md`.
+- CI installs the CPU build of PyTorch.
 - From-scratch NumPy MLP (`foilnet.nn`): forward pass, hand-derived backprop, Adam,
   mini-batch training, and a finite-difference `gradient_check`.
 - Dataset pipeline: Latin hypercube sampling, parallel batch generation with provenance

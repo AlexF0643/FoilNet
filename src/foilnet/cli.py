@@ -10,7 +10,6 @@ from foilnet import __version__
 
 # subcommand -> (help text, phase that implements it) for commands not built yet
 STUBS = {
-    "train": ("train a surrogate model", 5),
     "serve": ("start the interactive viewer", 8),
 }
 
@@ -34,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     generate.add_argument("--out", help="output .npz path (default: data/<dataset name>.npz)")
     generate.add_argument("--workers", type=int, help="worker processes (default: CPU count)")
+
+    train = sub.add_parser("train", help="train the PyTorch surrogate on a generated dataset")
+    train.add_argument("--config", default="configs/train-mlp.toml", help="training config (TOML)")
+    train.add_argument("--data", default="data/naca4-lhs.npz", help="dataset from `generate`")
+    train.add_argument("--out", default="runs/mlp.pt", help="where to save the trained model")
 
     for name, (help_text, _phase) in STUBS.items():
         sub.add_parser(name, help=help_text)
@@ -76,6 +80,48 @@ def _run_generate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
     return 0
 
 
+def _format_metrics(split: str, metrics: dict[str, dict[str, float]]) -> list[str]:
+    lines = []
+    for target, m in metrics.items():
+        lines.append(
+            f"{split:<5} {target:<3} rmse={m['rmse']:.2e}  mae={m['mae']:.2e}  "
+            f"max|err|={m['max_abs']:.2e}  R2={m['r2']:.6f}  rmse/spread={m['rmse_over_std']:.2%}"
+        )
+    return lines
+
+
+def _run_train(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        parser.error('training needs PyTorch: python -m pip install -e ".[ml]"')
+
+    from foilnet.config import ConfigError
+    from foilnet.data import load_dataset, random_split
+    from foilnet.nn.train import evaluate, load_train_config, train_surrogate
+
+    try:
+        config = load_train_config(args.config)
+    except ConfigError as exc:
+        parser.error(str(exc))
+    try:
+        dataset = load_dataset(args.data)
+    except FileNotFoundError as exc:
+        parser.error(f"{exc}; create it with `foilnet generate`")
+    train, val, test = random_split(dataset, config.split, seed=config.seed)
+    print(f"training on {len(train)} samples, validating on {len(val)}, holding out {len(test)}")
+    result = train_surrogate(train, val, config)
+    result.surrogate.save(args.out)
+    epochs = len(result.history["val_loss"])
+    print(f"ran {epochs} epochs; restored the best one (epoch {result.best_epoch})")
+    print(f"saved {args.out}")
+    for split, part in (("val", val), ("test", test)):
+        for line in _format_metrics(split, evaluate(result.surrogate, part)):
+            print(line)
+    print("the test set was used only for this report")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -86,6 +132,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_solve(args, parser)
     if args.command == "generate":
         return _run_generate(args, parser)
+    if args.command == "train":
+        return _run_train(args, parser)
     phase = STUBS[args.command][1]
     msg = f"foilnet {args.command}: not implemented yet (planned for Phase {phase})"
     print(msg, file=sys.stderr)

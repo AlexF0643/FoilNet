@@ -16,7 +16,7 @@ I write and validate the solver myself, so I understand the physics behind every
 
 ## Status
 
-**Phases 0 to 4 done (spine, geometry, panel solver, dataset generation, from-scratch NumPy network).** The solver is validated (see below) and a hand-written network can already learn its output. The PyTorch surrogate, uncertainty and viewer are still to come; `train` and `serve` are stubs that say which phase will implement them. Progress is tracked in [CHANGELOG.md](CHANGELOG.md) and the full roadmap is in [PROJECT_PLAN.md](PROJECT_PLAN.md).
+**Phases 0 to 5 done (spine, geometry, panel solver, dataset generation, from-scratch NumPy network, PyTorch surrogate).** The surrogate reproduces the solver's Cl and Cm to about 0.1% and 0.3% of their spread on held-out shapes. Uncertainty estimates, the honest failure-mode experiments and the viewer are still to come; `serve` is a stub that says which phase will implement it.
 
 ## Install
 
@@ -53,7 +53,7 @@ solver = PanelSolver(naca4_from_code("2412", n_panels=160))
 print(solver.solve(4.0).cl, solver.solve(8.0).cl)  # new angles of attack are almost free
 ```
 
-Planned subcommands that are still stubs: `train`, `serve`.
+Planned subcommand that is still a stub: `serve`.
 
 ## Dataset
 
@@ -72,6 +72,34 @@ scaler = Standardizer.fit(train.x)  # fit on training data only
 ```
 
 Labels are Cl and Cm from 160-panel solves. Against 640 panels they differ by at most 4e-4 in Cl and 8e-4 in Cm (spreads are 0.63 and 0.054), worst for thin, highly cambered sections at high angle of attack. That is a noise floor no surrogate can beat. Each sample also stores its pressure drag, which should be zero and is a per-sample check on numerical error.
+
+## Surrogate
+
+```bash
+python -m pip install -e ".[ml]"   # PyTorch (CPU is fine)
+foilnet generate
+foilnet train
+```
+
+`foilnet train` splits the dataset 70/15/15, trains the PyTorch network from `configs/train-mlp.toml`, restores the epoch with the lowest validation loss, saves `runs/mlp.pt`, and prints errors on the validation and test sets (about a minute). The test set is used only for that final report.
+
+```python
+from foilnet.nn.train import Surrogate
+
+model = Surrogate.load("runs/mlp.pt")
+model.predict([[0.02, 0.4, 0.12, 4.0]])  # camber, camber position, thickness, alpha (deg) -> Cl, Cm
+```
+
+Result on 750 held-out shapes (one run, seed 0):
+
+| | RMSE | max error | share of label spread |
+|---|---|---|---|
+| Cl | 7.0e-4 | 4.6e-3 | 0.11% |
+| Cm | 1.65e-4 | 1.25e-3 | 0.31% |
+
+The chosen settings, and how far to trust each, are in [docs/hyperparameters.md](docs/hyperparameters.md). The short version: learning rate, schedule and epochs matter; the differences between reasonable network sizes are inside seed-to-seed noise (about 30%). Cm error is already at the solver's own numerical error.
+
+This is accuracy on shapes drawn from the same ranges as the training data. How it behaves outside them, and whether it can tell, is what Phase 6 tests.
 
 ## From-scratch network
 

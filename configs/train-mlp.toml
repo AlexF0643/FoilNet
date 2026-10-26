@@ -1,13 +1,17 @@
-# Draft training config for the PyTorch MLP. Not read by anything yet (Phase 5).
+# Training config for the PyTorch MLP (`foilnet train`). The values come from the
+# validation-set search recorded in docs/hyperparameters.md.
 
 [model]
-hidden = [64, 64, 64]
+hidden = [128, 128]
 activation = "tanh"
 
 [train]
-epochs = 500
+epochs = 400
 batch_size = 128
-learning_rate = 1e-3
+learning_rate = 0.01
+weight_decay = 0.0001
+schedule = "cosine"   # decays to 1% of learning_rate; "constant" is much worse
+patience = 0          # 0 = always run all epochs, then restore the best one
 seed = 0
 
 [split]

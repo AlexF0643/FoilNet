@@ -11,8 +11,8 @@ dist/
 htmlcov/
 
 # generated data and models
-data/
-runs/
+/data/
+/runs/
 *.npz
 *.pt
 

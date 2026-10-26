@@ -41,7 +41,7 @@ Training the same configuration with four different seeds gave validation loss b
 
 Not searched: batch size, depth beyond three layers, width beyond 128, other optimisers.
 
-For scale, the labels themselves carry numerical error from the 160-panel solver of about 1.5e-4 on average in Cl and 1.4e-4 in Cm (see the README). The network's Cm error is already at that level, so more tuning of Cm is pointless; Cl error is about 4x above it.
+For scale, the labels differ from a converged (640-panel) solve by an RMS of about 1.6e-4 in Cl and 1.9e-4 in Cm on the test set. That is not noise (the network learns the 160-panel solver, not the converged one), but it is a useful yardstick: against a converged solver, the surrogate's error is about 4x this for Cl and about the same size for Cm.
 
 ## The raw search tables
 

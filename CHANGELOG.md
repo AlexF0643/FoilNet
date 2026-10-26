@@ -5,7 +5,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- Corrected the README and hyperparameter notes, which called the 160-panel label error a
+  noise floor no surrogate can beat. It is a deterministic, learnable offset from a
+  converged solver.
+
 ### Added
+- Deep ensemble (`foilnet.nn.ensemble`), `foilnet train --members N`, and the Phase 6
+  experiments (`foilnet.analysis`): calibration metrics, learning curves, a thin-to-thick
+  extrapolation test, solver speed comparison, figures and `docs/results.md`. Findings are
+  in the README.
+- CI installs the plotting extra.
 - PyTorch surrogate (`foilnet.nn.model`, `foilnet.nn.train`): MLP, training with a
   cosine schedule and best-epoch restore, `Surrogate` (raw in, raw out, save/load),
   evaluation metrics, and `foilnet train`. Tested against the NumPy network's forward

@@ -92,3 +92,60 @@ For scale, the labels differ from a converged (640-panel) solve by an RMS of abo
 | tanh, seed 1 | 5.14e-06 | 0.000616 | 0.000164 |
 | tanh, seed 2 | 6.39e-06 | 0.000875 | 0.000177 |
 | tanh, seed 3 | 6.16e-06 | 0.00092 | 0.000172 |
+
+## CST dataset
+
+The nine-input CST data was searched the same way (`configs/dataset-cst.toml`: 10,000 shapes at
+320 panels, split 7000 / 1500 / 1500, seed 0; validation set only, one run per configuration).
+The grid was widened to larger networks, since the problem has more inputs. The result is saved as
+`configs/train-mlp-cst.toml`.
+
+| setting | NACA (`train-mlp.toml`) | CST (`train-mlp-cst.toml`) |
+|---|---|---|
+| hidden layers | 128 x 128 | 256 x 256 |
+| learning rate | 0.01 | 0.003 |
+| weight decay | 1e-4 | 0 |
+| epochs | 400 | 800 |
+
+What stands out:
+
+- **Epochs mattered much more than architecture.** At the best configuration, validation loss
+  fell from 5.2e-6 (200 epochs) to 2.8e-6 (400) to 2.0e-6 (800), with the best epoch still the
+  last few. The NACA search gained under 1% from 400 to 800 epochs. I did not try more than 800,
+  so the CST loss may still be improvable.
+- **Architecture differences at 200 epochs are within seed noise.** The NACA search showed seed
+  noise of roughly 30% in validation loss; here the ten configurations span 5.2e-6 to 8.0e-6.
+  256 x 256 is the nominal winner, and 128 x 128 is close behind (5.4e-6).
+- **Weight decay did nothing** (identical to three digits at 0 and 1e-4).
+- Learning rate 0.003 beat 0.01 for the wider networks but not for 128 x 128, again within noise.
+
+#### Stage 1: architecture x learning rate (200 epochs)
+
+| hidden | lr | schedule | weight decay | epochs | best epoch | val loss | val RMSE cl | val RMSE cm | seconds |
+|---|---|---|---|---|---|---|---|---|---|
+| 256x256 | 0.003 | cosine | 0.0001 | 200 | 200 | 5.18e-06 | 0.0012 | 0.000168 | 58 |
+| 128x128 | 0.003 | cosine | 0.0001 | 200 | 199 | 5.44e-06 | 0.0012 | 0.000174 | 35 |
+| 128x128 | 0.01 | cosine | 0.0001 | 200 | 199 | 5.58e-06 | 0.00132 | 0.000169 | 35 |
+| 128x128x128 | 0.003 | cosine | 0.0001 | 200 | 199 | 5.64e-06 | 0.00129 | 0.000172 | 50 |
+| 256x256 | 0.01 | cosine | 0.0001 | 200 | 196 | 6.24e-06 | 0.00137 | 0.00018 | 59 |
+| 64x64 | 0.01 | cosine | 0.0001 | 200 | 198 | 6.33e-06 | 0.00142 | 0.000178 | 29 |
+| 256x256x256 | 0.003 | cosine | 0.0001 | 200 | 200 | 6.64e-06 | 0.00142 | 0.000185 | 64 |
+| 128x128x128 | 0.01 | cosine | 0.0001 | 200 | 198 | 7.17e-06 | 0.00155 | 0.000186 | 49 |
+| 256x256x256 | 0.01 | cosine | 0.0001 | 200 | 195 | 7.96e-06 | 0.00152 | 0.000206 | 64 |
+| 64x64 | 0.003 | cosine | 0.0001 | 200 | 193 | 8.02e-06 | 0.00152 | 0.000207 | 29 |
+
+#### Stage 2: schedule x weight decay (200 epochs)
+
+| hidden | lr | schedule | weight decay | epochs | best epoch | val loss | val RMSE cl | val RMSE cm | seconds |
+|---|---|---|---|---|---|---|---|---|---|
+| 256x256 | 0.003 | cosine | 0 | 200 | 200 | 5.18e-06 | 0.0012 | 0.000168 | 40 |
+| 256x256 | 0.003 | cosine | 0.0001 | 200 | 200 | 5.18e-06 | 0.0012 | 0.000168 | 41 |
+
+#### Stage 3: epochs
+
+| hidden | lr | schedule | weight decay | epochs | best epoch | val loss | val RMSE cl | val RMSE cm | seconds |
+|---|---|---|---|---|---|---|---|---|---|
+| 256x256 | 0.003 | cosine | 0 | 800 | 786 | 1.99e-06 | 0.000675 | 0.000109 | 148 |
+| 256x256 | 0.003 | cosine | 0 | 400 | 397 | 2.79e-06 | 0.000807 | 0.000128 | 89 |
+| 256x256 | 0.003 | cosine | 0 | 200 | 200 | 5.18e-06 | 0.0012 | 0.000168 | 52 |
+

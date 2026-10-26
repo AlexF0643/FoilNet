@@ -5,7 +5,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added (Phase 7)
+- CST (Kulfan) shapes: `foilnet.geometry.cst` (coefficients, contours, least-squares fits,
+  validity limits), a shape-family abstraction in `foilnet.data`, optional derived columns in
+  datasets (thickness, camber, trailing-edge angle), `configs/dataset-cst.toml` and
+  `configs/train-mlp-cst.toml`.
+- The experiment runner handles CST data (`--label-check-samples`, `--threshold`), writing
+  `docs/results-cst.md`. `docs/cst-validity.md` records why each shape limit exists.
+
 ### Fixed
+- Dataset generation and other worker pools were slowed several times over by every worker
+  starting its own multi-threaded maths library (800 CST shapes: 48 s with 8 workers, 182 s
+  with 4, 30 s serial). Workers now run single-threaded (`foilnet.parallel`): the same job
+  takes 19 s, and the 10,000-shape CST dataset takes under 3 minutes instead of 31.
 - Corrected the README and hyperparameter notes, which called the 160-panel label error a
   noise floor no surrogate can beat. It is a deterministic, learnable offset from a
   converged solver.

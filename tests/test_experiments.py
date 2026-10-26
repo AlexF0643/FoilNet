@@ -1,3 +1,7 @@
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -8,7 +12,12 @@ from foilnet.analysis.experiments import (  # noqa: E402
     run_all,
     solver_discretisation_error,
 )
-from foilnet.data import DatasetConfig, generate_dataset, generate_to_file  # noqa: E402
+from foilnet.data import (  # noqa: E402
+    DatasetConfig,
+    generate_dataset,
+    generate_to_file,
+    load_dataset_config,
+)
 from foilnet.nn.train import TrainConfig  # noqa: E402
 
 RANGES = {
@@ -18,6 +27,7 @@ RANGES = {
     "alpha_deg": (-5.0, 12.0),
 }
 FAST = TrainConfig(hidden=(8, 8), epochs=8, batch_size=32, learning_rate=5e-3)
+CST_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "dataset-cst.toml"
 
 
 @pytest.fixture(scope="module")
@@ -37,6 +47,13 @@ def test_discretisation_error_shrinks_when_the_reference_gets_closer(dataset):
     near = solver_discretisation_error(dataset, 60)
     far = solver_discretisation_error(dataset, 160)
     assert all(far[k] > near[k] > 0 for k in near)
+
+
+def test_label_check_can_use_only_the_first_samples(dataset):
+    limited = solver_discretisation_error(dataset, 60, workers=1, max_samples=50)
+    on_subset = solver_discretisation_error(dataset.subset(np.arange(50)), 60, workers=1)
+    assert limited == on_subset
+    assert limited != solver_discretisation_error(dataset, 60, workers=1)
 
 
 def test_discretisation_error_does_not_depend_on_worker_count(dataset):
@@ -70,6 +87,7 @@ def test_markdown_report_has_every_section_and_numbers(results):
         assert heading in text
     assert "![" not in text  # no figure links unless figures were made
     assert "solved with 40 panels" in text and "80-panel solve" in text
+    assert "of the same test samples" in text  # the check used every test sample
     assert "nan" not in text.lower().split()
 
 
@@ -77,6 +95,39 @@ def test_markdown_links_figures_when_asked(results):
     text = format_markdown(results, figures=True)
     for name in ("learning-curve", "extrapolation", "calibration"):
         assert f"assets/{name}.png" in text
+
+
+@pytest.fixture(scope="module")
+def cst_results():
+    cfg = replace(load_dataset_config(CST_CONFIG), name="tiny", n_samples=300, n_panels=40,
+                  max_abs_cd=None)
+    data = generate_dataset(cfg, workers=1)
+    results = run_all(
+        data, FAST, n_members=2, sizes=(20, 60), n_fine=60, workers=1, min_steps=100,
+        label_check_samples=40,
+    )
+    return data, results
+
+
+def test_cst_data_runs_through_every_experiment(cst_results):
+    data, results = cst_results
+    assert results.family == "cst" and results.timing is None  # timing samples NACA shapes only
+    assert results.extrapolation.feature == "thickness"
+    median_thickness = float(np.median(data.column("thickness")))
+    assert results.extrapolation.threshold == pytest.approx(median_thickness)
+    assert results.label_panels == 40 and set(results.label_error) == {"cl", "cm"}
+    assert results.label_check_n == 40
+    text = format_markdown(results)
+    assert f"the first 40 of the {results.n_test} test samples" in text
+    assert results.evaluation["cl"].ensemble_rmse > 0
+
+
+def test_cst_report_skips_the_speed_section_and_links_its_own_figures(cst_results):
+    _, results = cst_results
+    text = format_markdown(results, figures=True, figure_dir="assets/cst")
+    assert "# Results: cst shapes" in text
+    assert "## Speed" not in text
+    assert "(assets/cst/learning-curve.png)" in text and "(assets/cst/calibration.png)" in text
 
 
 def test_command_line_writes_report_figures_and_ensemble(tmp_path):
@@ -108,7 +159,7 @@ test = 0.15
             "--data", str(data), "--config", str(config), "--out", str(tmp_path / "r.md"),
             "--figures", str(tmp_path / "fig"), "--ensemble-out", str(tmp_path / "e.pt"),
             "--members", "2", "--workers", "1", "--sizes", "20,40", "--fine-panels", "60",
-            "--min-steps", "50",
+            "--min-steps", "50", "--label-check-samples", "30",
         ]
     )
     assert code == 0

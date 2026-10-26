@@ -14,7 +14,6 @@ and batch order (seeds ``config.seed + i``).
 from __future__ import annotations
 
 import os
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -23,6 +22,7 @@ import torch
 
 from foilnet.data import Dataset
 from foilnet.nn.train import Surrogate, TrainConfig, TrainResult, train_surrogate
+from foilnet.parallel import process_pool
 
 _FORMAT = 1
 
@@ -99,6 +99,6 @@ def train_ensemble(
     if workers == 1:
         results = [_train_member(t) for t in tasks]
     else:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
+        with process_pool(workers) as pool:
             results = list(pool.map(_train_member, tasks))
     return Ensemble(tuple(r.surrogate for r in results)), results

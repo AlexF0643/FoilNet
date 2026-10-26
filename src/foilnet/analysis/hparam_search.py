@@ -15,12 +15,12 @@ from __future__ import annotations
 import argparse
 import time
 from collections.abc import Sequence
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from foilnet.data import Dataset, load_dataset, random_split
 from foilnet.nn.train import TrainConfig, evaluate, train_surrogate
+from foilnet.parallel import process_pool
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ def run_grid(
     """Train every configuration; rows come back sorted best (lowest validation loss) first."""
     tasks = [(train, val, c) for c in configs]
     if workers > 1:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
+        with process_pool(workers) as pool:
             rows = list(pool.map(_run_one, tasks))
     else:
         rows = [_run_one(t) for t in tasks]

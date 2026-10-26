@@ -1,0 +1,37 @@
+# CST dataset: 4 coefficients per surface (8 shape parameters) plus angle of attack.
+# Shapes are sampled in a box around the coefficients of NACA-like sections, then any that
+# are not usable aerofoils are dropped (see docs/cst-validity.md for why each limit exists).
+# Generate with: foilnet generate --config configs/dataset-cst.toml
+
+[dataset]
+name = "cst-lhs"
+n_samples = 10000
+seed = 0
+family = "cst"
+n_coefficients = 4
+
+[solver]
+# 320 rather than 160: CST shapes with a drooping trailing edge converge more slowly, and
+# 320 panels cuts the label error about 3x (see docs/cst-validity.md).
+n_panels = 320
+# safety net: drop samples whose pressure drag (should be 0) exceeds this, a sign of a failed solve
+max_abs_cd = 0.05
+
+[shape]
+min_te_angle_deg = 5.0    # included trailing-edge angle; the solver degrades below this
+min_thickness = 0.04
+max_thickness = 0.22
+max_camber = 0.08
+min_le_coefficient = 0.10  # round nose: au0 and -al0 both at least this ...
+min_le_ratio = 0.25        # ... and the smaller at least this fraction of the larger
+
+[ranges]
+au0 = [0.08, 0.48]
+au1 = [0.06, 0.40]
+au2 = [0.05, 0.42]
+au3 = [0.05, 0.55]
+al0 = [-0.26, 0.04]
+al1 = [-0.24, 0.18]
+al2 = [-0.22, 0.12]
+al3 = [-0.22, 0.25]
+alpha_deg = [-5.0, 12.0]

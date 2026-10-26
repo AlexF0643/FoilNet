@@ -303,6 +303,42 @@ test = 0.15
     assert Surrogate.load(out).predict(np.array([[0.02, 0.4, 0.12, 4.0]])).shape == (1, 2)
 
 
+def test_train_command_ensemble(tmp_path, capsys):
+    from foilnet.nn.ensemble import Ensemble
+
+    data = tmp_path / "d.npz"
+    generate_to_file(DatasetConfig("tiny", 120, 0, 40, RANGES), data, workers=1)
+    config = tmp_path / "t.toml"
+    config.write_text(
+        """
+[model]
+hidden = [8]
+activation = "tanh"
+
+[train]
+epochs = 3
+batch_size = 32
+learning_rate = 0.003
+seed = 0
+
+[split]
+train = 0.7
+val = 0.15
+test = 0.15
+""",
+        encoding="utf-8",
+    )
+    out = tmp_path / "e.pt"
+    argv = ["train", "--config", str(config), "--data", str(data), "--out", str(out)]
+    assert main([*argv, "--members", "2"]) == 0
+    text = capsys.readouterr().out
+    assert "trained 2 networks" in text and "inside +/-1 spread" in text
+    mean, std = Ensemble.load(out).predict(np.array([[0.02, 0.4, 0.12, 4.0]]))
+    assert mean.shape == std.shape == (1, 2)
+    with pytest.raises(SystemExit):
+        main([*argv, "--members", "0"])
+
+
 def test_train_command_reports_missing_dataset(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["train", "--config", str(SHIPPED), "--data", str(tmp_path / "none.npz")])

@@ -37,7 +37,11 @@ def build_parser() -> argparse.ArgumentParser:
     train = sub.add_parser("train", help="train the PyTorch surrogate on a generated dataset")
     train.add_argument("--config", default="configs/train-mlp.toml", help="training config (TOML)")
     train.add_argument("--data", default="data/naca4-lhs.npz", help="dataset from `generate`")
-    train.add_argument("--out", default="runs/mlp.pt", help="where to save the trained model")
+    train.add_argument("--out", help="where to save the model (default runs/mlp.pt, or "
+                       "runs/ensemble.pt with --members)")
+    train.add_argument("--members", type=int, default=1,
+                       help="train a deep ensemble of this many networks (2 or more) and report "
+                       "its uncertainty; 1 trains a single network")
 
     for name, (help_text, _phase) in STUBS.items():
         sub.add_parser(name, help=help_text)
@@ -98,7 +102,7 @@ def _run_train(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
 
     from foilnet.config import ConfigError
     from foilnet.data import load_dataset, random_split
-    from foilnet.nn.train import evaluate, load_train_config, train_surrogate
+    from foilnet.nn.train import load_train_config
 
     try:
         config = load_train_config(args.config)
@@ -110,14 +114,55 @@ def _run_train(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
         parser.error(f"{exc}; create it with `foilnet generate`")
     train, val, test = random_split(dataset, config.split, seed=config.seed)
     print(f"training on {len(train)} samples, validating on {len(val)}, holding out {len(test)}")
+    if args.members == 1:
+        return _train_single(args, config, train, val, test)
+    return _train_ensemble(args, parser, config, train, val, test)
+
+
+def _train_single(args, config, train, val, test) -> int:
+    from foilnet.nn.train import evaluate, train_surrogate
+
     result = train_surrogate(train, val, config)
-    result.surrogate.save(args.out)
+    out = args.out or "runs/mlp.pt"
+    result.surrogate.save(out)
     epochs = len(result.history["val_loss"])
     print(f"ran {epochs} epochs; restored the best one (epoch {result.best_epoch})")
-    print(f"saved {args.out}")
+    print(f"saved {out}")
     for split, part in (("val", val), ("test", test)):
         for line in _format_metrics(split, evaluate(result.surrogate, part)):
             print(line)
+    print("the test set was used only for this report")
+    return 0
+
+
+def _train_ensemble(args, parser, config, train, val, test) -> int:
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from foilnet.analysis.calibration import calibration_report
+    from foilnet.nn.ensemble import train_ensemble
+    from foilnet.nn.train import evaluate
+
+    if args.members < 2:
+        parser.error("--members must be 1 (a single network) or at least 2")
+    ensemble, _ = train_ensemble(train, val, config, args.members)
+    out = args.out or "runs/ensemble.pt"
+    ensemble.save(out)
+    print(f"trained {args.members} networks; saved {out}")
+    mean_only = SimpleNamespace(predict=lambda x: ensemble.predict(x)[0])
+    for split, part in (("val", val), ("test", test)):
+        for line in _format_metrics(split, evaluate(mean_only, part)):
+            print(line)
+    mean, sigma = ensemble.predict(test.x)
+    for j, target in enumerate(test.target_names):
+        rep = calibration_report(mean[:, j] - test.y[:, j], sigma[:, j])
+        inside = rep.coverage[1.0][1]
+        print(
+            f"test  {target:<3} spread: mean={np.mean(sigma[:, j]):.2e}  "
+            f"error/spread (RMS)={rep.rms_z:.2f}  "
+            f"inside +/-1 spread={inside:.0%} (68% if calibrated)"
+        )
     print("the test set was used only for this report")
     return 0
 

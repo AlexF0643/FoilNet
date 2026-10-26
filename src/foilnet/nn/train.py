@@ -126,37 +126,28 @@ class Surrogate:
             out = self.model(scaled).numpy().astype(float)
         return self.y_scaler.inverse(out)
 
-    def save(self, path: str | Path) -> None:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+    def to_blob(self) -> dict[str, Any]:
+        """Plain tensors, lists and strings only, so it can be loaded with weights_only=True."""
         config = asdict(self.config)
-        torch.save(
-            {
-                "format": _FORMAT,
-                "state_dict": self.model.state_dict(),
-                "sizes": list(self.model.sizes),
-                "activation": self.model.activation,
-                "x_mean": torch.as_tensor(self.x_scaler.mean),
-                "x_std": torch.as_tensor(self.x_scaler.std),
-                "y_mean": torch.as_tensor(self.y_scaler.mean),
-                "y_std": torch.as_tensor(self.y_scaler.std),
-                "feature_names": list(self.feature_names),
-                "target_names": list(self.target_names),
-                "config": {k: list(v) if isinstance(v, tuple) else v for k, v in config.items()},
-                "provenance": self.provenance,
-            },
-            path,
-        )
+        return {
+            "format": _FORMAT,
+            "state_dict": self.model.state_dict(),
+            "sizes": list(self.model.sizes),
+            "activation": self.model.activation,
+            "x_mean": torch.as_tensor(self.x_scaler.mean),
+            "x_std": torch.as_tensor(self.x_scaler.std),
+            "y_mean": torch.as_tensor(self.y_scaler.mean),
+            "y_std": torch.as_tensor(self.y_scaler.std),
+            "feature_names": list(self.feature_names),
+            "target_names": list(self.target_names),
+            "config": {k: list(v) if isinstance(v, tuple) else v for k, v in config.items()},
+            "provenance": self.provenance,
+        }
 
     @classmethod
-    def load(cls, path: str | Path) -> Surrogate:
-        path = Path(path)
-        if not path.is_file():
-            raise FileNotFoundError(f"model file not found: {path}")
-        # weights_only=True refuses to unpickle arbitrary objects, so a model file cannot run code
-        blob = torch.load(path, weights_only=True)
+    def from_blob(cls, blob: dict[str, Any], source: str = "blob") -> Surrogate:
         if blob.get("format") != _FORMAT:
-            raise ValueError(f"{path} has model format {blob.get('format')}, expected {_FORMAT}")
+            raise ValueError(f"{source} has model format {blob.get('format')}, expected {_FORMAT}")
         sizes = blob["sizes"]
         model = MLP(sizes[0], sizes[1:-1], sizes[-1], blob["activation"])
         model.load_state_dict(blob["state_dict"])
@@ -173,6 +164,19 @@ class Surrogate:
             config=config,
             provenance=blob["provenance"],
         )
+
+    def save(self, path: str | Path) -> None:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(self.to_blob(), path)
+
+    @classmethod
+    def load(cls, path: str | Path) -> Surrogate:
+        path = Path(path)
+        if not path.is_file():
+            raise FileNotFoundError(f"model file not found: {path}")
+        # weights_only=True refuses to unpickle arbitrary objects, so a model file cannot run code
+        return cls.from_blob(torch.load(path, weights_only=True), str(path))
 
 
 @dataclass

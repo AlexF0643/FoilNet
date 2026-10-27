@@ -9,22 +9,25 @@ that follow from it (`ShapeLimits` in `src/foilnet/geometry/cst.py`, set in
 
 The only exact reference with a finite trailing-edge angle is the Karman-Trefftz aerofoil, whose
 included angle is `(2 - n) * 180` degrees. Relative error in Cl against the exact lift, 160 panels,
-alpha = 3 degrees:
+alpha = 3 degrees, for the solver as it was through Phase 8 (`legacy`) and the Phase 9.1 trailing-edge
+treatment (`smooth`; see [trailing-edge.md](trailing-edge.md)):
 
-| trailing-edge angle | relative Cl error |
-|---|---|
-| 0 degrees (pure Joukowski cusp) | about 2% |
-| 1.8 | 9.5e-4 |
-| 3.6 | 6.8e-4 |
-| 5.4 | 5.2e-4 |
-| 9.0 | 3.8e-4 |
-| 18 | 2.6e-4 |
-| 27 | 2.2e-4 |
+| trailing-edge angle | relative Cl error, legacy | smooth |
+|---|---|---|
+| 0 degrees (pure Joukowski cusp) | about 2% | 5.3e-4 |
+| 1.8 | 9.5e-4 | 4.5e-4 |
+| 3.6 | 6.8e-4 | 4.0e-4 |
+| 5.4 | 5.2e-4 | 3.7e-4 |
+| 9.0 | 3.8e-4 | 3.4e-4 |
+| 18 | 2.6e-4 | 3.1e-4 |
+| 27 | 2.2e-4 | 3.0e-4 |
 
-Only a true cusp is a problem. Error grows slowly as the angle closes, and 320 panels cuts it by
-about 3. An earlier note in the README said CST shapes might be risky because of cusped trailing
+With the legacy treatment only a true cusp was a problem; the smooth one handles it too. Error
+grows slowly as the angle closes, and 320 panels cuts it by about 3 (legacy) to 4 (smooth). An earlier note in the README said CST shapes might be risky because of cusped trailing
 edges; the measurements say the risk is a perfect cusp, which CST shapes do not produce unless a
-shape is degenerate. The limit is **5 degrees**, where the error is about 5e-4 at 160 panels.
+shape is degenerate. The limit is **5 degrees**, where the error is about 5e-4 at 160 panels. That
+limit was chosen for the legacy treatment; with the smooth one it could be relaxed, and I have not
+done so.
 
 ## 2. Leading edge: a knife-edge nose has no valid answer
 
@@ -59,7 +62,13 @@ safety net still drops any sample whose diagnostic is above 0.05 (`max_abs_cd` i
 The pressure-drag diagnostic turned out to be a poor predictor of label accuracy (section 3), so it
 is only a net for catastrophic failures, not a quality filter.
 
-## 3. A drooping trailing edge slows the solver's convergence
+## 3. A drooping trailing edge slowed the old solver's convergence (fixed in Phase 9.1)
+
+This section records what was measured with the legacy trailing-edge treatment; the cause turned
+out to be the trailing edge itself (a nearly undetermined pair of end nodes) and is fixed by the
+smoothness condition described in [trailing-edge.md](trailing-edge.md). With it, CST labels at 160
+panels differ from a 640-panel solve by an RMS of 2.3e-4 in Cl (legacy: 1.2e-3), and at 320
+panels by 4.4e-5 (legacy: 4.2e-4).
 
 After the nose rule, the solver's labels were still less accurate than for NACA shapes. Against a
 640-panel solve of the same shapes (900 random samples that passed the rules):
@@ -85,9 +94,10 @@ fixed, 160-panel Cl error rises with the upper-surface slope at the trailing edg
 NACA sections have a near-symmetric wedge at the trailing edge, so they never meet this; random
 CST shapes often have a drooped one. Doubling the panels reduces the error by about 3 (a clean
 second-order method would give 4), so the convergence is somewhat slower than ideal for these
-shapes. **This is a weakness of the solver, not of CST**, and I have not tried to fix it. What I did:
-the CST labels use **320 panels** instead of 160, and the remaining difference from a converged
-solve is reported with the results (`docs/results-cst.md`).
+shapes. **This was a weakness of the solver, not of CST.** At the time I worked around it: the CST
+labels use **320 panels** instead of 160, and the remaining difference from a converged solve is
+reported with the results (`docs/results-cst.md`). The dataset keeps 320 panels after the fix, since
+it brings the label difference to about 5e-5 in Cl, a tenth of the network's own error.
 
 ## 4. CST with four coefficients is not NACA
 

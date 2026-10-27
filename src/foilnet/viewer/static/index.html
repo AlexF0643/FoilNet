@@ -376,29 +376,18 @@ function drawSweep(target) {
 
 function drawCp() {
   const svg = $("plot"); svg.textContent = "";
-  const cp = result.cp, art = cp.te_artifact;
-  // a spurious spike on the trailing-edge panel is left out of the plot (it stays in the table)
-  const shown = {
-    upper: { x: cp.upper.x.slice(art.upper ? 1 : 0), cp: cp.upper.cp.slice(art.upper ? 1 : 0) },
-    lower: { x: cp.lower.x.slice(0, art.lower ? -1 : undefined),
-             cp: cp.lower.cp.slice(0, art.lower ? -1 : undefined) },
-  };
-  const all = shown.upper.cp.concat(shown.lower.cp);
+  const cp = result.cp, all = cp.upper.cp.concat(cp.lower.cp);
   let ymin = Math.min(...all), ymax = Math.max(1, ...all);
   ymin = Math.min(ymin, -0.5);
   const f = frame(svg, [0, 1], [ymin - 0.05, ymax + 0.05], "x / chord", "Cp  (suction is up)", true);
   const line = (s, dash) => el("polyline", { points: s.x.map((x, i) => `${f.sx(x)},${f.sy(s.cp[i])}`).join(" "),
     fill: "none", stroke: "var(--solver)", "stroke-width": 2, "stroke-linejoin": "round",
     ...(dash ? { "stroke-dasharray": "6 4" } : {}) }, svg);
-  line(shown.upper); line(shown.lower, true);
+  line(cp.upper); line(cp.lower, true);
   const lg = $("legend"); lg.textContent = "";
   lg.append(legendItem("var(--solver)", "upper surface", "line"), legendItem("var(--solver)", "lower surface", "dash"));
-  const cut = [art.upper && ["upper", cp.upper.cp[0]], art.lower && ["lower", cp.lower.cp[cp.lower.cp.length - 1]]]
-    .filter(Boolean).map(([n, v]) => `${n} surface Cp ${fmt(v, 1)}`);
   $("plotnote").textContent = "The network predicts Cl and Cm only, so this plot is the solver's " +
-    "pressure distribution alone." + (cut.length ? " The panel at the trailing edge (" + cut.join(", ") +
-    ") is left out: on some shapes the solver puts a spurious suction spike there. It does not shrink " +
-    "with more panels and barely affects Cl or Cm, since the panel is tiny. The table keeps it." : "");
+    "pressure distribution alone. Predicting the whole distribution is a stretch goal.";
   $("tip").style.display = "none";
   fillTable(["x / chord (upper)", "Cp upper", "x / chord (lower)", "Cp lower"],
     cp.upper.x.map((x, i) => [x.toFixed(4), cp.upper.cp[i].toFixed(4),

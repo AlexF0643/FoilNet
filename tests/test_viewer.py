@@ -156,21 +156,11 @@ def test_contour_and_pressure_are_returned(viewer):
     assert len(cp["upper"]["x"]) + len(cp["lower"]["x"]) == 41  # 40 panels; the nose is shared
 
 
-def test_trailing_edge_spike_is_flagged_but_kept(viewer):
-    from foilnet.viewer.service import te_artifact
-
-    smooth = np.array([0.9, 0.6, 0.5, 0.45, 0.4, 0.38, 0.35])
-    spiked = smooth.copy()
-    spiked[0] = -11.0
-    assert not te_artifact(smooth, True) and te_artifact(spiked, True)
-    assert not te_artifact(smooth[::-1], False) and te_artifact(spiked[::-1], False)
-    # a cambered section at high angle has the spike on the real solver
+def test_pressure_has_no_spike_at_the_trailing_edge(viewer):
+    # this section at this angle put Cp = -23 on the last panel before the trailing-edge fix
     values = {"camber": 0.05, "camber_position": 0.225, "thickness": 0.071, "alpha_deg": 11.374}
     cp = viewer.evaluate({**centre(viewer), **values}, sweep=False)["cp"]
-    assert cp["te_artifact"] == {"upper": True, "lower": True}
-    assert cp["upper"]["cp"][0] < -5 and cp["lower"]["cp"][-1] < -5  # values are not hidden
-    assert viewer.evaluate(centre(viewer), sweep=False)["cp"]["te_artifact"] == {
-        "upper": False, "lower": False}
+    assert cp["upper"]["cp"][0] > 0.0 and cp["lower"]["cp"][-1] > 0.0
 
 
 def test_outside_the_trained_range_is_reported(viewer):

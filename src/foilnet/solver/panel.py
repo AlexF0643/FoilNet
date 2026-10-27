@@ -6,6 +6,20 @@ along each panel and is continuous from panel to panel. The unknowns are the she
 strengths at the contour nodes. Zero normal velocity is imposed at every panel
 midpoint, and a Kutta condition closes the system at the trailing edge.
 
+Trailing edge
+-------------
+Nodes 1 and n + 1 of a closed contour are the same point. The Kutta condition
+gamma_1 = -gamma_(n+1) alone leaves the *size* of that pair almost undetermined: equal and
+opposite strengths on two tiny, nearly parallel panels meeting at one point induce almost
+no velocity anywhere, so the system has a mode with a singular value about 1e-5 of the
+largest. The solution then carries an arbitrary multiple of that mode, which shows as a
+spurious spike in Cp on the single trailing-edge panel (Cp below -20 on some shapes) that
+does not shrink with more panels. The ``"smooth"`` treatment (the default) also ties the
+trailing-edge strength to its neighbours, gamma_1 = (gamma_2 - gamma_n) / 2, which removes
+the mode; the n equations then have n - 1 unknowns and are solved in the least-squares sense
+(they are consistent to discretisation error). ``"legacy"`` is the original Kutta-only
+system (solver id ``linear-vortex-kutta-v1``), kept so the difference can be reproduced.
+
 Conventions
 -----------
 * The contour is closed and counter-clockwise, as produced by ``foilnet.geometry``.
@@ -24,14 +38,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.linalg import lu_factor, lu_solve
+from scipy.linalg import lstsq, lu_factor, lu_solve
 
 from foilnet.geometry.paneling import Panels, build_panels
 
 _INV_2PI = 1.0 / (2.0 * np.pi)
 
 # Recorded in every dataset's metadata. Change it whenever a code change alters results.
-SOLVER_ID = "linear-vortex-kutta-v1"
+SOLVER_ID = "linear-vortex-kutta-v2"
+LEGACY_SOLVER_ID = "linear-vortex-kutta-v1"
+TE_TREATMENTS = ("smooth", "legacy")
 
 
 @dataclass(frozen=True)
@@ -50,7 +66,7 @@ class PanelSolution:
 
 
 def _influence_matrix(panels: Panels) -> np.ndarray:
-    """(n + 1, n + 1) system: n zero-normal-velocity rows plus the Kutta row."""
+    """(n, n + 1): normal velocity at each control point per unit node strength."""
     n = panels.n
     d = panels.midpoint[:, None, :] - panels.start[None, :, :]  # control point i, panel j
     t = panels.tangent[None, :, :]
@@ -80,11 +96,29 @@ def _influence_matrix(panels: Panels) -> np.ndarray:
     coef_a = u_a * t_dot_n + v_a * left_dot_n
     coef_b = u_b * t_dot_n + v_b * left_dot_n
 
-    matrix = np.zeros((n + 1, n + 1))
-    matrix[:n, :n] += coef_a
-    matrix[:n, 1:] += coef_b
-    matrix[n, 0] = matrix[n, n] = 1.0  # Kutta: gamma at the two trailing-edge nodes cancel
+    matrix = np.zeros((n, n + 1))
+    matrix[:, :n] += coef_a
+    matrix[:, 1:] += coef_b
     return matrix
+
+
+def _trailing_edge_map(n: int, smooth: bool) -> np.ndarray:
+    """(n + 1, k): node strengths as a linear function of the free unknowns.
+
+    Legacy: k = n, the two trailing-edge nodes are one unknown with opposite signs (Kutta).
+    Smooth: k = n - 1, the interior nodes are free and the trailing-edge pair follows from
+    gamma_1 = (gamma_2 - gamma_n) / 2 and gamma_(n+1) = -gamma_1.
+    """
+    if smooth:
+        t = np.zeros((n + 1, n - 1))
+        t[np.arange(1, n), np.arange(n - 1)] = 1.0
+        t[0, 0], t[0, n - 2] = 0.5, -0.5
+        t[n] = -t[0]
+        return t
+    t = np.zeros((n + 1, n))
+    t[np.arange(n), np.arange(n)] = 1.0
+    t[n, 0] = -1.0  # gamma_(n+1) = -gamma_1 (Kutta)
+    return t
 
 
 class PanelSolver:
@@ -94,7 +128,10 @@ class PanelSolver:
     (cos alpha, sin alpha), so two base solutions are computed once and combined.
     """
 
-    def __init__(self, coords: np.ndarray):
+    def __init__(self, coords: np.ndarray, te_treatment: str = "smooth"):
+        if te_treatment not in TE_TREATMENTS:
+            raise ValueError(f"te_treatment must be one of {TE_TREATMENTS}, got {te_treatment!r}")
+        self.te_treatment = te_treatment
         self.coords = np.asarray(coords, dtype=float)
         self.panels = build_panels(self.coords)
         x = self.coords[:, 0]
@@ -103,11 +140,17 @@ class PanelSolver:
         self._ref = np.array([x.min() + 0.25 * self.chord, self.coords[i_le, 1]])
 
         n = self.panels.n
-        lu = lu_factor(_influence_matrix(self.panels))
-        rhs = np.zeros((n + 1, 2))
-        rhs[:n] = -self.panels.normal  # columns: freestream along x, along y
-        base = lu_solve(lu, rhs)
+        rhs = -self.panels.normal  # (n, 2): freestream along x, along y
+        t_map = _trailing_edge_map(n, te_treatment == "smooth")
+        system = _influence_matrix(self.panels) @ t_map
+        if te_treatment == "smooth":
+            unknowns, *_ = lstsq(system, rhs, lapack_driver="gelsy")
+        else:
+            unknowns = lu_solve(lu_factor(system), rhs)
+        base = t_map @ unknowns
         self._gamma_x, self._gamma_y = base[:, 0], base[:, 1]
+        # largest normal velocity left over at a control point, per unit freestream
+        self.max_residual = float(np.abs(system @ unknowns - rhs).max())
 
     def solve(self, alpha_deg: float) -> PanelSolution:
         a = np.deg2rad(alpha_deg)
@@ -142,6 +185,6 @@ class PanelSolver:
         )
 
 
-def solve(coords: np.ndarray, alpha_deg: float) -> PanelSolution:
+def solve(coords: np.ndarray, alpha_deg: float, te_treatment: str = "smooth") -> PanelSolution:
     """Solve one contour at one angle of attack."""
-    return PanelSolver(coords).solve(alpha_deg)
+    return PanelSolver(coords, te_treatment).solve(alpha_deg)

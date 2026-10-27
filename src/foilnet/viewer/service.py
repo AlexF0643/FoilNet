@@ -29,29 +29,12 @@ SWEEP_PAD_DEG = 6.0  # the sweep runs this far beyond the training range of alph
 NACA_PRESETS = ("0012", "2412", "4412")
 
 
-# The panel at the trailing edge can carry a spurious suction spike (see ``te_artifact``).
-TE_SPIKE_DROP = 1.0
-
-
 class ViewerError(ValueError):
     """A request that cannot be answered; the message is safe to show to the user."""
 
 
 def _round(values: np.ndarray, digits: int = 5) -> list[float]:
     return [round(float(v), digits) for v in np.asarray(values).ravel()]
-
-
-def te_artifact(cp: np.ndarray, at_start: bool) -> bool:
-    """Whether the trailing-edge panel of a surface has a spurious suction spike.
-
-    On some shapes (strongly drooping or reflexed trailing edges) the panel next to the
-    trailing edge has a Cp far below its neighbours, down to -11 or lower. It is not physical
-    (the flow stagnates at a wedge trailing edge), it does not shrink as panels are added,
-    and it has almost no effect on Cl or Cm because the panel is tiny. ``cp`` runs from the
-    trailing edge inwards when ``at_start`` is true, and towards it otherwise.
-    """
-    end, inner = (cp[0], cp[1:6]) if at_start else (cp[-1], cp[-6:-1])
-    return bool(end < inner.min() - TE_SPIKE_DROP)
 
 
 class ViewerModel:
@@ -192,13 +175,6 @@ class ViewerModel:
                 # contour order runs from the upper trailing edge round the nose to the lower one
                 "upper": {"x": _round(mid[: i_le + 1, 0]), "cp": _round(solution.cp[: i_le + 1])},
                 "lower": {"x": _round(mid[i_le:, 0]), "cp": _round(solution.cp[i_le:])},
-                # whether each surface's trailing-edge panel is a spurious spike (first point
-                # of "upper", last point of "lower"); the values are kept, the page leaves
-                # them out of the plot
-                "te_artifact": {
-                    "upper": te_artifact(solution.cp[: i_le + 1], True),
-                    "lower": te_artifact(solution.cp[i_le:], False),
-                },
             },
             "solver": {"cl": solution.cl, "cm": solution.cm},
             "surrogate": {

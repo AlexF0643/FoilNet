@@ -25,6 +25,7 @@ from foilnet.nn.train import (  # noqa: E402
     parse_train_config,
     train_surrogate,
 )
+from foilnet.solver import SOLVER_ID  # noqa: E402
 
 RANGES = {
     "camber": (0.0, 0.06),
@@ -198,7 +199,7 @@ def test_save_and_load_round_trip(splits, tmp_path):
     assert np.array_equal(loaded.predict(val.x), original.predict(val.x))
     assert loaded.config == original.config
     assert loaded.feature_names == train.feature_names and loaded.target_names == ("cl", "cm")
-    assert loaded.provenance["solver_id"] == "linear-vortex-kutta-v1"
+    assert loaded.provenance["solver_id"] == SOLVER_ID
     assert loaded.provenance["n_panels"] == 60
 
 

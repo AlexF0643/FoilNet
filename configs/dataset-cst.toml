@@ -11,8 +11,9 @@ family = "cst"
 n_coefficients = 4
 
 [solver]
-# 320 rather than 160: CST shapes with a drooping trailing edge converge more slowly, and
-# 320 panels cuts the label error about 3x (see docs/cst-validity.md).
+# 320 rather than 160: the label error against a 640-panel solve is then about 5e-5 in Cl, well
+# below the network's own error (about 5e-4); at 160 panels it is about 2.5e-4. See
+# docs/trailing-edge.md.
 n_panels = 320
 # safety net: drop samples whose pressure drag (should be 0) exceeds this, a sign of a failed solve
 max_abs_cd = 0.05

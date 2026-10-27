@@ -135,6 +135,8 @@ foilnet/
 
 **Phase 8: Viewer (done).** Interactive sliders and the live solver-vs-network comparison. Includes a **sweep mode** (requested by Alex): plot Cl against angle of attack for the current shape, solver curve plus the surrogate's prediction with its uncertainty band, updating as the shape sliders move.
 
+**Phase 9.1: Trailing-edge treatment (done).** Fixed the Cp spike on the last panel (a near-null mode at the trailing edge): a smoothness condition on the end nodes, `te_treatment`, solver id v2, and `docs/trailing-edge.md`. Datasets and results regenerated.
+
 **Phase 9 (stretch): Viscous drag, full-Cp prediction.**
 
 **Phase 10: Polish.** README, figures, CHANGELOG, v0.1.0 release.

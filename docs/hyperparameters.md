@@ -23,7 +23,7 @@ How the defaults in `configs/train-mlp.toml` were chosen, and how much to trust 
 | batch size | 128 | not searched; a standard value for a dataset this size |
 | early stopping | off, restore best epoch | with cosine decay the best epoch is nearly always the last few |
 
-Final test-set result (one run, seed 0): Cl RMSE 7.0e-4 and Cm RMSE 1.65e-4, which are 0.11% and 0.31% of the label spread. Validation gave 6.9e-4 and 1.58e-4, so the choices did not overfit the validation set.
+Final test-set result (one run, seed 0, labels from the Phase 9.1 solver): Cl RMSE 6.4e-4 and Cm RMSE 1.67e-4, which are 0.10% and 0.31% of the label spread. Validation gave 6.6e-4 and 1.59e-4, so the choices did not overfit the validation set. The searches below were run on the labels from the earlier trailing-edge treatment. The NACA labels moved by about 1e-6, so that does not matter there; the CST labels moved by an RMS of 9e-4 in Cl, so the CST search is worth repeating before trusting its small differences.
 
 ## What the search shows clearly
 

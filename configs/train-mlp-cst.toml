@@ -1,0 +1,23 @@
+# Training config for the CST dataset (`foilnet train --config configs/train-mlp-cst.toml
+# --data data/cst-lhs.npz`). Chosen by a validation-set search on the CST data; see
+# docs/hyperparameters.md. Compared with configs/train-mlp.toml (NACA): a wider network, a
+# lower learning rate and twice the epochs, because the 9-input problem keeps improving with
+# longer training where the 4-input one had stopped.
+
+[model]
+hidden = [256, 256]
+activation = "tanh"
+
+[train]
+epochs = 800
+batch_size = 128
+learning_rate = 0.003
+weight_decay = 0.0
+schedule = "cosine"
+patience = 0
+seed = 0
+
+[split]
+train = 0.7
+val = 0.15
+test = 0.15

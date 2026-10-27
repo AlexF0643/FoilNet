@@ -1,7 +1,7 @@
 import pytest
 
 from foilnet import __version__
-from foilnet.cli import STUBS, main
+from foilnet.cli import main
 
 
 def test_no_args_prints_help(capsys):
@@ -14,12 +14,6 @@ def test_version(capsys):
         main(["--version"])
     assert exc.value.code == 0
     assert __version__ in capsys.readouterr().out
-
-
-@pytest.mark.parametrize("command", STUBS)
-def test_stubs_report_not_implemented(command, capsys):
-    assert main([command]) == 2
-    assert "not implemented" in capsys.readouterr().err
 
 
 def test_solve_prints_coefficients(capsys):

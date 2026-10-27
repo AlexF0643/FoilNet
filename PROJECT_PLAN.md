@@ -133,7 +133,7 @@ foilnet/
 
 **Phase 7: CST shapes.** Richer design space. Does the network still cope?
 
-**Phase 8: Viewer.** Interactive sliders and the live solver-vs-network comparison.
+**Phase 8: Viewer (done).** Interactive sliders and the live solver-vs-network comparison. Includes a **sweep mode** (requested by Alex): plot Cl against angle of attack for the current shape, solver curve plus the surrogate's prediction with its uncertainty band, updating as the shape sliders move.
 
 **Phase 9 (stretch): Viscous drag, full-Cp prediction.**
 

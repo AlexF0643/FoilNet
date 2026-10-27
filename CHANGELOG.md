@@ -5,7 +5,39 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added (Phase 8)
+- `foilnet serve`: a local interactive viewer (standard-library server, single HTML page).
+  Shape and angle sliders, aerofoil outline, solver and network results side by side with the
+  ensemble spread, a sweep mode (Cl or Cm against angle of attack, solver curve against the
+  network with its uncertainty band), the solver's pressure distribution, and warnings when
+  an input is outside the trained range or a CST shape breaks the shape limits.
+- `foilnet.viewer.ViewerModel`: the same calculation as a Python API.
+- The pressure plot omits (and says so) a spurious trailing-edge-panel spike the solver produces on
+  some shapes; the values stay in the table and the API.
+
+### Added (Phase 7)
+- CST (Kulfan) shapes: `foilnet.geometry.cst` (coefficients, contours, least-squares fits,
+  validity limits), a shape-family abstraction in `foilnet.data`, optional derived columns in
+  datasets (thickness, camber, trailing-edge angle), `configs/dataset-cst.toml` and
+  `configs/train-mlp-cst.toml`.
+- The experiment runner handles CST data (`--label-check-samples`, `--threshold`), writing
+  `docs/results-cst.md`. `docs/cst-validity.md` records why each shape limit exists.
+
+### Fixed
+- Dataset generation and other worker pools were slowed several times over by every worker
+  starting its own multi-threaded maths library (800 CST shapes: 48 s with 8 workers, 182 s
+  with 4, 30 s serial). Workers now run single-threaded (`foilnet.parallel`): the same job
+  takes 19 s, and the 10,000-shape CST dataset takes under 3 minutes instead of 31.
+- Corrected the README and hyperparameter notes, which called the 160-panel label error a
+  noise floor no surrogate can beat. It is a deterministic, learnable offset from a
+  converged solver.
+
 ### Added
+- Deep ensemble (`foilnet.nn.ensemble`), `foilnet train --members N`, and the Phase 6
+  experiments (`foilnet.analysis`): calibration metrics, learning curves, a thin-to-thick
+  extrapolation test, solver speed comparison, figures and `docs/results.md`. Findings are
+  in the README.
+- CI installs the plotting extra.
 - PyTorch surrogate (`foilnet.nn.model`, `foilnet.nn.train`): MLP, training with a
   cosine schedule and best-epoch restore, `Surrogate` (raw in, raw out, save/load),
   evaluation metrics, and `foilnet train`. Tested against the NumPy network's forward

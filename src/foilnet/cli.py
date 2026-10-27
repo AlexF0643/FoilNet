@@ -3,15 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from collections.abc import Sequence
 
 from foilnet import __version__
-
-# subcommand -> (help text, phase that implements it) for commands not built yet
-STUBS = {
-    "serve": ("start the interactive viewer", 8),
-}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,10 +31,18 @@ def build_parser() -> argparse.ArgumentParser:
     train = sub.add_parser("train", help="train the PyTorch surrogate on a generated dataset")
     train.add_argument("--config", default="configs/train-mlp.toml", help="training config (TOML)")
     train.add_argument("--data", default="data/naca4-lhs.npz", help="dataset from `generate`")
-    train.add_argument("--out", default="runs/mlp.pt", help="where to save the trained model")
+    train.add_argument("--out", help="where to save the model (default runs/mlp.pt, or "
+                       "runs/ensemble.pt with --members)")
+    train.add_argument("--members", type=int, default=1,
+                       help="train a deep ensemble of this many networks (2 or more) and report "
+                       "its uncertainty; 1 trains a single network")
 
-    for name, (help_text, _phase) in STUBS.items():
-        sub.add_parser(name, help=help_text)
+    serve = sub.add_parser("serve", help="start the interactive viewer in your browser")
+    serve.add_argument("--model", default="runs/ensemble.pt",
+                       help="ensemble or single-network file from `train` "
+                       "(default runs/ensemble.pt; use runs/ensemble-cst.pt for CST shapes)")
+    serve.add_argument("--port", type=int, default=8000, help="port (default 8000; 0 picks one)")
+    serve.add_argument("--open", action="store_true", help="open the viewer in a browser tab")
     return parser
 
 
@@ -80,6 +82,42 @@ def _run_generate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
     return 0
 
 
+def _run_serve(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        parser.error('the viewer needs PyTorch: python -m pip install -e ".[ml]"')
+
+    from foilnet.nn.ensemble import Ensemble
+    from foilnet.nn.train import Surrogate
+    from foilnet.viewer import ViewerError, ViewerModel, make_server
+
+    try:
+        try:
+            model = Ensemble.load(args.model)
+        except ValueError:  # not an ensemble file: try a single network
+            model = Surrogate.load(args.model)
+        viewer = ViewerModel(model)
+    except FileNotFoundError as exc:
+        parser.error(f"{exc}; create it with `foilnet train`")
+    except (ValueError, ViewerError) as exc:
+        parser.error(f"cannot use {args.model}: {exc}")
+    server = make_server(viewer, "127.0.0.1", args.port)  # this computer only
+    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    print(f"serving {args.model} ({viewer.family.name} shapes) at {url}   (Ctrl+C to stop)")
+    if args.open:
+        import webbrowser
+
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("stopped")
+    finally:
+        server.server_close()
+    return 0
+
+
 def _format_metrics(split: str, metrics: dict[str, dict[str, float]]) -> list[str]:
     lines = []
     for target, m in metrics.items():
@@ -98,7 +136,7 @@ def _run_train(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
 
     from foilnet.config import ConfigError
     from foilnet.data import load_dataset, random_split
-    from foilnet.nn.train import evaluate, load_train_config, train_surrogate
+    from foilnet.nn.train import load_train_config
 
     try:
         config = load_train_config(args.config)
@@ -110,14 +148,55 @@ def _run_train(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
         parser.error(f"{exc}; create it with `foilnet generate`")
     train, val, test = random_split(dataset, config.split, seed=config.seed)
     print(f"training on {len(train)} samples, validating on {len(val)}, holding out {len(test)}")
+    if args.members == 1:
+        return _train_single(args, config, train, val, test)
+    return _train_ensemble(args, parser, config, train, val, test)
+
+
+def _train_single(args, config, train, val, test) -> int:
+    from foilnet.nn.train import evaluate, train_surrogate
+
     result = train_surrogate(train, val, config)
-    result.surrogate.save(args.out)
+    out = args.out or "runs/mlp.pt"
+    result.surrogate.save(out)
     epochs = len(result.history["val_loss"])
     print(f"ran {epochs} epochs; restored the best one (epoch {result.best_epoch})")
-    print(f"saved {args.out}")
+    print(f"saved {out}")
     for split, part in (("val", val), ("test", test)):
         for line in _format_metrics(split, evaluate(result.surrogate, part)):
             print(line)
+    print("the test set was used only for this report")
+    return 0
+
+
+def _train_ensemble(args, parser, config, train, val, test) -> int:
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from foilnet.analysis.calibration import calibration_report
+    from foilnet.nn.ensemble import train_ensemble
+    from foilnet.nn.train import evaluate
+
+    if args.members < 2:
+        parser.error("--members must be 1 (a single network) or at least 2")
+    ensemble, _ = train_ensemble(train, val, config, args.members)
+    out = args.out or "runs/ensemble.pt"
+    ensemble.save(out)
+    print(f"trained {args.members} networks; saved {out}")
+    mean_only = SimpleNamespace(predict=lambda x: ensemble.predict(x)[0])
+    for split, part in (("val", val), ("test", test)):
+        for line in _format_metrics(split, evaluate(mean_only, part)):
+            print(line)
+    mean, sigma = ensemble.predict(test.x)
+    for j, target in enumerate(test.target_names):
+        rep = calibration_report(mean[:, j] - test.y[:, j], sigma[:, j])
+        inside = rep.coverage[1.0][1]
+        print(
+            f"test  {target:<3} spread: mean={np.mean(sigma[:, j]):.2e}  "
+            f"error/spread (RMS)={rep.rms_z:.2f}  "
+            f"inside +/-1 spread={inside:.0%} (68% if calibrated)"
+        )
     print("the test set was used only for this report")
     return 0
 
@@ -134,10 +213,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_generate(args, parser)
     if args.command == "train":
         return _run_train(args, parser)
-    phase = STUBS[args.command][1]
-    msg = f"foilnet {args.command}: not implemented yet (planned for Phase {phase})"
-    print(msg, file=sys.stderr)
-    return 2
+    if args.command == "serve":
+        return _run_serve(args, parser)
+    parser.error(f"unknown command {args.command!r}")
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ recording where every number came from.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,9 @@ class Dataset:
     target_names: tuple[str, ...]
     metadata: dict[str, Any]
     cd_pressure: np.ndarray | None = None  # (n,)
+    # Derived descriptors that are not model inputs (e.g. the maximum thickness of a CST
+    # shape), each an array of length n. They let an experiment split on a physical quantity.
+    extras: dict[str, np.ndarray] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if len(self.x) != len(self.y):
@@ -33,6 +36,11 @@ class Dataset:
             raise ValueError("feature_names does not match the columns of x")
         if self.y.shape[1] != len(self.target_names):
             raise ValueError("target_names does not match the columns of y")
+        for name, values in self.extras.items():
+            if len(values) != len(self.x):
+                raise ValueError(
+                    f"extra column {name!r} has {len(values)} rows, expected {len(self.x)}"
+                )
 
     def __len__(self) -> int:
         return len(self.x)
@@ -46,11 +54,17 @@ class Dataset:
             self.target_names,
             self.metadata,
             None if self.cd_pressure is None else self.cd_pressure[index],
+            {name: values[index] for name, values in self.extras.items()},
         )
 
     def column(self, name: str) -> np.ndarray:
-        """A feature column by name, e.g. for building a mask: ``ds.column("thickness") < 0.12``."""
-        return self.x[:, self.feature_names.index(name)]
+        """A feature column, or a derived extra column, by name, e.g. for building a mask:
+        ``ds.column("thickness") < 0.12``."""
+        if name in self.feature_names:
+            return self.x[:, self.feature_names.index(name)]
+        if name in self.extras:
+            return self.extras[name]
+        raise KeyError(f"no feature or extra column named {name!r}")
 
 
 def save_dataset(path: str | Path, dataset: Dataset) -> None:
@@ -67,6 +81,8 @@ def save_dataset(path: str | Path, dataset: Dataset) -> None:
     }
     if dataset.cd_pressure is not None:
         arrays["cd_pressure"] = dataset.cd_pressure
+    for name, values in dataset.extras.items():
+        arrays[f"extra__{name}"] = values
     np.savez_compressed(path, **arrays)
 
 
@@ -86,6 +102,7 @@ def load_dataset(path: str | Path) -> Dataset:
             target_names=tuple(meta["target_names"]),
             metadata=meta,
             cd_pressure=f["cd_pressure"] if "cd_pressure" in f.files else None,
+            extras={k[len("extra__") :]: f[k] for k in f.files if k.startswith("extra__")},
         )
 
 

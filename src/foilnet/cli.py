@@ -3,15 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from collections.abc import Sequence
 
 from foilnet import __version__
-
-# subcommand -> (help text, phase that implements it) for commands not built yet
-STUBS = {
-    "serve": ("start the interactive viewer", 8),
-}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,8 +37,12 @@ def build_parser() -> argparse.ArgumentParser:
                        help="train a deep ensemble of this many networks (2 or more) and report "
                        "its uncertainty; 1 trains a single network")
 
-    for name, (help_text, _phase) in STUBS.items():
-        sub.add_parser(name, help=help_text)
+    serve = sub.add_parser("serve", help="start the interactive viewer in your browser")
+    serve.add_argument("--model", default="runs/ensemble.pt",
+                       help="ensemble or single-network file from `train` "
+                       "(default runs/ensemble.pt; use runs/ensemble-cst.pt for CST shapes)")
+    serve.add_argument("--port", type=int, default=8000, help="port (default 8000; 0 picks one)")
+    serve.add_argument("--open", action="store_true", help="open the viewer in a browser tab")
     return parser
 
 
@@ -81,6 +79,42 @@ def _run_generate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
     print(f"wrote {out}: {meta['n_samples']} samples, {meta['n_dropped']} dropped")
     print(f"max |pressure drag| (numerical-error diagnostic) = {meta['max_abs_cd_pressure']:.2g}")
     print(f"took {time.perf_counter() - start:.1f} s")
+    return 0
+
+
+def _run_serve(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        parser.error('the viewer needs PyTorch: python -m pip install -e ".[ml]"')
+
+    from foilnet.nn.ensemble import Ensemble
+    from foilnet.nn.train import Surrogate
+    from foilnet.viewer import ViewerError, ViewerModel, make_server
+
+    try:
+        try:
+            model = Ensemble.load(args.model)
+        except ValueError:  # not an ensemble file: try a single network
+            model = Surrogate.load(args.model)
+        viewer = ViewerModel(model)
+    except FileNotFoundError as exc:
+        parser.error(f"{exc}; create it with `foilnet train`")
+    except (ValueError, ViewerError) as exc:
+        parser.error(f"cannot use {args.model}: {exc}")
+    server = make_server(viewer, "127.0.0.1", args.port)  # this computer only
+    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    print(f"serving {args.model} ({viewer.family.name} shapes) at {url}   (Ctrl+C to stop)")
+    if args.open:
+        import webbrowser
+
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("stopped")
+    finally:
+        server.server_close()
     return 0
 
 
@@ -179,10 +213,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_generate(args, parser)
     if args.command == "train":
         return _run_train(args, parser)
-    phase = STUBS[args.command][1]
-    msg = f"foilnet {args.command}: not implemented yet (planned for Phase {phase})"
-    print(msg, file=sys.stderr)
-    return 2
+    if args.command == "serve":
+        return _run_serve(args, parser)
+    parser.error(f"unknown command {args.command!r}")
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ I write and validate the solver myself, so I understand the physics behind every
 
 ## Status
 
-**Phases 0 to 7 done (spine, geometry, panel solver, dataset, NumPy network, PyTorch surrogate, uncertainty and honest testing, CST shapes).** A single network reproduces the solver's Cl and Cm to about 0.1% and 0.3% of their spread on held-out NACA shapes, and an ensemble does about as well on the nine-input CST shapes with more data and training. The ensemble spread flags extrapolation, but how honest it is varies (see the two results sections). The viewer (with a Cl-versus-angle sweep mode) and the release polish are still to come; `serve` is a stub that says which phase will implement it.
+**Phases 0 to 8 done (spine, geometry, panel solver, dataset, NumPy network, PyTorch surrogate, uncertainty and honest testing, CST shapes, interactive viewer).** A single network reproduces the solver's Cl and Cm to about 0.1% and 0.3% of their spread on held-out NACA shapes, and an ensemble does about as well on the nine-input CST shapes with more data and training. The ensemble spread flags extrapolation, but how honest it is varies (see the two results sections). The viewer is the last piece before release polish.
 
 ## Install
 
@@ -53,7 +53,7 @@ solver = PanelSolver(naca4_from_code("2412", n_panels=160))
 print(solver.solve(4.0).cl, solver.solve(8.0).cl)  # new angles of attack are almost free
 ```
 
-Planned subcommand that is still a stub: `serve`.
+`foilnet serve` starts the interactive viewer (see below).
 
 ## Dataset
 
@@ -236,6 +236,27 @@ For the same accuracy the CST problem needs several times more data: about 800 s
 I repeated the thin-to-thick test: train on shapes thinner than 13.7% (the median) and test on thicker ones, out to 22%. The Cl error grows 7.5 times from in range (6.5e-4) to the far band (4.9e-3), a much gentler rise than for NACA (15 times). The ensemble spread tracks it closely this time: error is 1.15 times the spread in range and 1.3, 1.4 and 1.5 times in the three bands outside, and the plus-or-minus-one-spread band holds 69% of errors in range and 59% in the farthest band (68% if calibrated). For NACA the spread understated the error by about 2 times or more.
 
 Two cautions. First, this is not the same experiment as for NACA. Thickness is not an input here: a thick CST shape is built from coefficient values that thinner training shapes also contain, so it is a milder kind of extrapolation. I have not tested extrapolating a coefficient beyond its sampled range. Second, how honest the spread is depends on how long the networks were trained. With the NACA settings, the CST ensemble's error was 1.0 times its spread in Cl and 1.2 times in Cm (the one-spread band held 76% and 72%); with the longer-trained settings it was 1.5 and 1.8 times (71% and 59%). Longer training made the members agree with each other faster than it made them accurate. This is one comparison on one split, not a rule.
+
+## The viewer
+
+```bash
+foilnet serve --model runs/ensemble.pt          # NACA shapes
+foilnet serve --model runs/ensemble-cst.pt      # CST shapes
+```
+
+This starts a small web server on `127.0.0.1` (this computer only) and prints the address; add `--open` to open it in your browser, `--port` to change the port. It needs a model from `foilnet train --members N` (or a single network from `foilnet train`) and nothing else: the shape family, the trained ranges and the panel count are read from the model file. The page is one HTML file with no external scripts, and the server uses only the standard library.
+
+What it shows, as you move the sliders:
+
+- **The aerofoil**, with the free-stream direction for the current angle, and an optional dot at each panel node.
+- **Solver and network side by side**: Cl and Cm from the panel solver, the network's mean with the spread between its members, and the difference.
+- **Sweep mode**: Cl (or Cm) against angle of attack for the current shape, drawn by the solver (blue) and the network (orange, with a band of plus or minus one spread). The curve redraws as you move the shape sliders. The sweep runs 6 degrees beyond the trained angles on each side, and the trained angles are shaded, so you can see what happens outside them.
+- **Pressure distribution** from the solver (the network predicts Cl and Cm only). On some shapes (about 6% of random NACA sections, more CST ones, mostly cambered sections at high angle) the solver puts a spurious suction spike on the single panel at the trailing edge, down to Cp of -23. It does not shrink with more panels, while Cl and Cm do converge and barely depend on that panel (it is tiny), so the plot leaves it out, says so, and the table keeps it. It is a weakness of the solver's trailing-edge treatment that I have not fixed.
+- **Checks**: any slider outside the range the network was trained on is named, with a warning that the network is extrapolating, and for CST shapes any breach of the shape limits is listed. Sliders reach 25% past the trained range on each side, with the trained part shaded on the slider, so extrapolating is one drag away.
+
+Things worth trying: drag a CST coefficient past its shaded range and watch the gap between the two curves open while the band stays narrow (that is the spread understating the error, measured in the results sections above); or sweep past the trained angles with a typical shape: in the CST model the two curves stay together to the end of the sweep, because lift is nearly linear in angle, so extrapolating in angle is much easier than extrapolating in shape. The solver is inviscid, so no setting produces stall, however high the angle.
+
+The same calculation is available without the page: `foilnet.viewer.ViewerModel(model).evaluate({...})` returns the numbers the page draws.
 
 ## Solver validation
 

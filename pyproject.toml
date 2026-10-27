@@ -26,6 +26,9 @@ foilnet = "foilnet.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+foilnet = ["viewer/static/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
